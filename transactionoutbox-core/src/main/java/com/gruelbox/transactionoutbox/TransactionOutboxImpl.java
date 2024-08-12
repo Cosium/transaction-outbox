@@ -42,7 +42,7 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
   private final Duration retentionThreshold;
   private final AtomicBoolean initialized = new AtomicBoolean();
   private final ProxyFactory proxyFactory = new ProxyFactory();
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler;
 
   private TransactionOutboxImpl(
       TransactionManager transactionManager,
@@ -57,7 +57,8 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
       TransactionOutboxListener listener,
       boolean serializeMdc,
       Validator validator,
-      Duration retentionThreshold) {
+      Duration retentionThreshold,
+      ThreadFactory schedulerThreadFactory) {
     this.transactionManager = transactionManager;
     this.persistor = persistor;
     this.instantiator = instantiator;
@@ -77,6 +78,11 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
     this.serializeMdc = serializeMdc;
     this.validator = validator;
     this.retentionThreshold = retentionThreshold;
+    if (schedulerThreadFactory != null) {
+      scheduler = Executors.newSingleThreadScheduledExecutor(schedulerThreadFactory);
+    } else {
+      scheduler = Executors.newSingleThreadScheduledExecutor();
+    }
   }
 
   @Override
@@ -507,7 +513,8 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
               Utils.firstNonNull(listener, () -> TransactionOutboxListener.EMPTY),
               serializeMdc == null || serializeMdc,
               validator,
-              retentionThreshold == null ? Duration.ofDays(7) : retentionThreshold);
+              retentionThreshold == null ? Duration.ofDays(7) : retentionThreshold,
+              schedulerThreadFactory);
       validator.validate(impl);
       if (initializeImmediately == null || initializeImmediately) {
         impl.initialize();
