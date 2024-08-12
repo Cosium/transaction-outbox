@@ -443,6 +443,22 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
     }
   }
 
+  @Override
+  public void close() {
+    scheduler.shutdownNow();
+    boolean terminated;
+    try {
+      terminated = scheduler.awaitTermination(5, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException(e);
+    }
+    if (terminated) {
+      return;
+    }
+    logAtLevel(log, Level.WARN, "The task didn't stop within 5 seconds following the shutdown signal");
+  }
+
   @ToString
   static class TransactionOutboxBuilderImpl extends TransactionOutboxBuilder {
 
