@@ -8,11 +8,19 @@ import static java.time.temporal.ChronoUnit.MINUTES;
 import com.gruelbox.transactionoutbox.spi.ProxyFactory;
 import com.gruelbox.transactionoutbox.spi.Utils;
 import java.lang.reflect.InvocationTargetException;
-import java.time.*;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -44,7 +52,7 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
   private final Duration retentionThreshold;
   private final AtomicBoolean initialized = new AtomicBoolean();
   private final ProxyFactory proxyFactory = new ProxyFactory();
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler;
 
   @Override
   public void validate(Validator validator) {
@@ -456,7 +464,8 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
     if (terminated) {
       return;
     }
-    logAtLevel(log, Level.WARN, "The task didn't stop within 5 seconds following the shutdown signal");
+    logAtLevel(
+        log, Level.WARN, "The task didn't stop within 5 seconds following the shutdown signal");
   }
 
   @ToString
@@ -482,7 +491,10 @@ final class TransactionOutboxImpl implements TransactionOutbox, Validatable {
               Utils.firstNonNull(listener, () -> TransactionOutboxListener.EMPTY),
               serializeMdc == null || serializeMdc,
               validator,
-              retentionThreshold == null ? Duration.ofDays(7) : retentionThreshold);
+              retentionThreshold == null ? Duration.ofDays(7) : retentionThreshold,
+              schedulerThreadFactory == null
+                  ? Executors.newSingleThreadScheduledExecutor()
+                  : Executors.newSingleThreadScheduledExecutor(schedulerThreadFactory));
       validator.validate(impl);
       if (initializeImmediately == null || initializeImmediately) {
         impl.initialize();
