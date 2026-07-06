@@ -1,5 +1,7 @@
 package com.gruelbox.transactionoutbox;
 
+import static java.util.Objects.requireNonNull;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringWriter;
@@ -148,6 +150,7 @@ public class DefaultPersistor implements Persistor, Validatable {
         seqUpdate.setString(2, entry.getTopic());
         seqUpdate.executeUpdate();
       } else {
+        OptionalSavePoint savepoint = OptionalSavePoint.createIfSupported(tx.connection());
         try {
           entry.setSequence(1L);
           //noinspection resource
@@ -158,12 +161,48 @@ public class DefaultPersistor implements Persistor, Validatable {
           seqInsert.executeUpdate();
         } catch (Exception e) {
           if (indexViolation(e)) {
+            savepoint.rollback();
             setNextSequence(tx, entry);
           } else {
             throw e;
           }
+        } finally {
+          savepoint.release();
         }
       }
+    }
+  }
+
+  private static class OptionalSavePoint {
+
+    private final Connection connection;
+    private final Savepoint savepoint;
+
+    private OptionalSavePoint(Connection connection, Savepoint savepoint) {
+      this.connection = requireNonNull(connection);
+      this.savepoint = savepoint;
+    }
+
+    public static OptionalSavePoint createIfSupported(Connection connection) throws SQLException {
+      try {
+        return new OptionalSavePoint(connection, connection.setSavepoint());
+      } catch (SQLFeatureNotSupportedException e) {
+        return new OptionalSavePoint(connection, null);
+      }
+    }
+
+    public void rollback() throws SQLException {
+      if (savepoint == null) {
+        return;
+      }
+      connection.rollback(savepoint);
+    }
+
+    public void release() throws SQLException {
+      if (savepoint == null) {
+        return;
+      }
+      connection.releaseSavepoint(savepoint);
     }
   }
 
