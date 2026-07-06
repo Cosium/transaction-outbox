@@ -195,14 +195,22 @@ public class DefaultPersistor implements Persistor, Validatable {
       if (savepoint == null) {
         return;
       }
-      connection.rollback(savepoint);
+      try {
+        connection.rollback(savepoint);
+      } catch (SQLFeatureNotSupportedException e) {
+        log.debug("JDBC driver does not support savepoint rollback", e);
+      }
     }
 
     public void release() throws SQLException {
       if (savepoint == null) {
         return;
       }
-      connection.releaseSavepoint(savepoint);
+      try {
+        connection.releaseSavepoint(savepoint);
+      } catch (SQLFeatureNotSupportedException e) {
+        log.debug("JDBC driver does not support savepoint release", e);
+      }
     }
   }
 
